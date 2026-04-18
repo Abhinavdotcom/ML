@@ -1,0 +1,278 @@
+================================================================================
+  ENSEMBLE LEARNING — TITANIC SURVIVAL PREDICTION
+  Topic   : Decision Tree, Random Forest, Bagging, AdaBoost
+  Dataset : Titanic (891 passengers × 12 columns, via GitHub)
+  Tools   : pandas, numpy, matplotlib, seaborn, scikit-learn
+  Models  : DecisionTree, RandomForest, BaggingClassifier, AdaBoostClassifier
+================================================================================
+
+
+[ BLOCK 1 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import all required libraries:
+#   - numpy / pandas          : data manipulation and loading
+#   - matplotlib / seaborn    : confusion matrix heatmap
+#   - train_test_split        : split data for hold-out evaluation
+#   - StandardScaler          : normalize feature magnitudes
+#   - DecisionTreeClassifier  : single decision tree (baseline)
+#   - RandomForestClassifier  : ensemble of many trees (bagging-based)
+#   - BaggingClassifier       : generic bootstrap aggregating ensemble
+#   - AdaBoostClassifier      : adaptive boosting ensemble
+#   - confusion_matrix        : actual vs predicted breakdown
+#   - accuracy_score          : overall prediction accuracy
+#   - classification_report   : per-class performance metrics
+# ---------------------------------------------------------
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+
+
+[ BLOCK 2 — LOAD TITANIC DATASET ]
+# ---------------------------------------------------------
+# Load the Titanic dataset directly from a public GitHub URL.
+# No file upload needed — pandas read_csv() accepts URLs.
+# The dataset contains 891 passenger records with features:
+#   PassengerId, Survived, Pclass, Name, Sex, Age,
+#   SibSp, Parch, Ticket, Fare, Cabin, Embarked
+# Target: 'Survived' (0 = did not survive, 1 = survived)
+# ---------------------------------------------------------
+
+url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+df = pd.read_csv(url)
+df.head()
+
+
+[ BLOCK 3 — DATA CLEANING & PREPROCESSING ]
+# ---------------------------------------------------------
+# Step 1: Print null value counts to identify missing data.
+#         Age: 177 missing, Cabin: 687 missing, Embarked: 2 missing.
+#
+# Step 2: Drop columns that are not useful for prediction:
+#   'Name'   → unique string identifier, no predictive signal
+#   'Ticket' → arbitrary alphanumeric code, low signal
+#   'Cabin'  → 77% missing, too sparse to impute reliably
+#
+# Step 3: Impute remaining missing values:
+#   Age      → fill with MEDIAN (robust to skew/outliers)
+#   Embarked → fill with MODE (most frequent port: 'S')
+#
+# Step 4: One-Hot Encode categorical columns:
+#   'Sex'      → Male=1, Female=0 (or vice versa)
+#   'Embarked' → C=Cherbourg, Q=Queenstown, S=Southampton
+#   drop_first=True avoids the dummy variable trap.
+# ---------------------------------------------------------
+
+print(df.isnull().sum())
+
+df.drop(['Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
+
+df['Age'].fillna(df['Age'].median(), inplace=True)
+df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
+
+df = pd.get_dummies(df, columns=['Sex', 'Embarked'], drop_first=True)
+df.head()
+
+
+[ BLOCK 4 — FEATURE / TARGET SPLIT ]
+# ---------------------------------------------------------
+# Separate features (X) and the binary survival target (y):
+#   X : all columns except 'Survived'
+#   y : 'Survived' column (0 or 1)
+# ---------------------------------------------------------
+
+X = df.drop('Survived', axis=1)
+y = df['Survived']
+
+
+[ BLOCK 5 — TRAIN / TEST SPLIT ]
+# ---------------------------------------------------------
+# Split into 80% training and 20% testing sets.
+# test_size=0.2 → 178 samples reserved for testing
+# random_state=42 → consistent split for reproducibility
+# ---------------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+
+[ BLOCK 6 — FEATURE SCALING ]
+# ---------------------------------------------------------
+# Standardize features using StandardScaler:
+#   fit_transform(X_train) → learns mean/std from TRAINING data only
+#   transform(X_test)      → applies learned parameters to test data
+#
+# Avoids data leakage: test data statistics must NOT influence
+# the scaler. This is a critical best practice in ML pipelines.
+# ---------------------------------------------------------
+
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+
+[ BLOCK 7 — BASELINE: DECISION TREE CLASSIFIER ]
+# ---------------------------------------------------------
+# Train a single Decision Tree with no depth restriction.
+# This is the baseline model — typically overfits on small
+# datasets, giving high training accuracy but lower test accuracy.
+# The ensemble methods in the next blocks are designed to improve on this.
+#
+# Result: Decision Tree Accuracy ≈ 72.1%
+# ---------------------------------------------------------
+
+dt = DecisionTreeClassifier(random_state=42)
+dt.fit(X_train, y_train)
+
+y_pred_dt = dt.predict(X_test)
+print("Decision Tree Accuracy:", accuracy_score(y_test, y_pred_dt))
+# Output: 0.7206703910614525
+
+
+[ BLOCK 8 — RANDOM FOREST CLASSIFIER ]
+# ---------------------------------------------------------
+# Random Forest builds n_estimators=100 independent decision trees,
+# each trained on a random bootstrap sample of the data and
+# with a random subset of features at each split.
+#
+# This "double randomness" (rows + features) reduces variance
+# and prevents individual trees from overfitting. Final prediction
+# is the majority vote across all 100 trees.
+#
+# Result: Random Forest Accuracy ≈ 82.7% — best model here.
+# ---------------------------------------------------------
+
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train, y_train)
+
+y_pred_rf = rf.predict(X_test)
+print("Random Forest Accuracy:", accuracy_score(y_test, y_pred_rf))
+# Output: 0.8268156424581006
+
+
+[ BLOCK 9 — BAGGING CLASSIFIER ]
+# ---------------------------------------------------------
+# BaggingClassifier = Bootstrap Aggregating.
+# Trains n_estimators=50 Decision Trees, each on a different
+# random bootstrap sample (sampling with replacement).
+# Unlike Random Forest, ALL features are considered at each split —
+# Random Forest adds an extra layer of feature randomness.
+#
+# Final prediction = majority vote across all 50 base learners.
+# Reduces variance by averaging out individual model errors.
+#
+# Result: Bagging Accuracy ≈ 82.1%
+# ---------------------------------------------------------
+
+bagging = BaggingClassifier(
+    estimator=DecisionTreeClassifier(),
+    n_estimators=50,
+    random_state=42
+)
+bagging.fit(X_train, y_train)
+y_pred_bag = bagging.predict(X_test)
+
+print("Bagging Accuracy:", accuracy_score(y_test, y_pred_bag))
+# Output: 0.8212290502793296
+
+
+[ BLOCK 10 — ADABOOST CLASSIFIER (Boosting) ]
+# ---------------------------------------------------------
+# AdaBoost (Adaptive Boosting) trains trees SEQUENTIALLY.
+# Each subsequent tree focuses more on samples that were
+# misclassified by the previous one, by increasing their weights.
+# Final prediction is a weighted vote of all 50 weak learners.
+#
+# Boosting reduces BIAS (systematic error) rather than variance.
+# It works best when individual learners are "weak" (slightly
+# better than random) — hence shallow trees are typical.
+#
+# Result: Boosting Accuracy ≈ 79.9%
+# (Slightly lower than RF/Bagging on this small dataset.)
+# ---------------------------------------------------------
+
+boost = AdaBoostClassifier(n_estimators=50, random_state=42)
+boost.fit(X_train, y_train)
+y_pred_boost = boost.predict(X_test)
+
+print("Boosting Accuracy:", accuracy_score(y_test, y_pred_boost))
+# Output: 0.7988826815642458
+
+
+[ BLOCK 11 — CONFUSION MATRIX (Random Forest) ]
+# ---------------------------------------------------------
+# Plot the confusion matrix for the best-performing model
+# (Random Forest) as a heatmap.
+#
+# Matrix layout:
+#   [[TN  FP]    TN = True Negatives  (correctly predicted: did not survive)
+#    [FN  TP]]   TP = True Positives  (correctly predicted: survived)
+#                FP = False Positives (predicted survived, actually didn't)
+#                FN = False Negatives (predicted not survived, actually did)
+#
+# fmt='d' → display as integers, not scientific notation.
+# ---------------------------------------------------------
+
+cm = confusion_matrix(y_test, y_pred_rf)
+
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.title("Confusion Matrix - Random Forest")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+
+[ BLOCK 12 — CLASSIFICATION REPORT (Random Forest) ]
+# ---------------------------------------------------------
+# Print the full precision/recall/F1-score breakdown for
+# the Random Forest model:
+#
+#   precision = TP / (TP + FP)  → when it says "survived", how often right?
+#   recall    = TP / (TP + FN)  → of all who survived, how many did it catch?
+#   F1-score  = 2 × (precision × recall) / (precision + recall)
+#
+# Results:
+#   Class 0 (did not survive): precision=0.83, recall=0.89, F1=0.86
+#   Class 1 (survived)       : precision=0.82, recall=0.74, F1=0.78
+#   Overall Accuracy         : 82.7%
+# ---------------------------------------------------------
+
+print("Classification Report (Random Forest):")
+print(classification_report(y_test, y_pred_rf))
+
+
+[ BLOCK 13 — MODEL COMPARISON SUMMARY ]
+# ---------------------------------------------------------
+# Print a final accuracy comparison across all 4 models.
+# This block allows quick identification of the best performer.
+# ---------------------------------------------------------
+
+print("Model Comparison:")
+print("Decision Tree:", accuracy_score(y_test, y_pred_dt))
+print("Random Forest:", accuracy_score(y_test, y_pred_rf))
+print("Bagging:      ", accuracy_score(y_test, y_pred_bag))
+print("Boosting:     ", accuracy_score(y_test, y_pred_boost))
+
+
+# ================================================================================
+# FINAL RESULTS SUMMARY:
+#
+#   Model           | Accuracy
+#   --------------- | --------
+#   Decision Tree   |  72.07%   ← Baseline (single tree, overfits)
+#   Bagging         |  82.12%   ← Reduced variance via bootstrapping
+#   AdaBoost        |  79.89%   ← Reduced bias via sequential learning
+#   Random Forest   |  82.68%   ← Best: combines bagging + feature randomness
+#
+# KEY INSIGHT: All ensemble methods significantly outperform the single
+# Decision Tree, demonstrating the power of combining multiple weak learners.
+# ================================================================================

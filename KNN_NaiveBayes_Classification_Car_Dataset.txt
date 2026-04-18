@@ -1,0 +1,221 @@
+================================================================================
+  KNN AND NAIVE BAYES CLASSIFICATION — CAR PRICE DATASET
+  Topic   : Comparing Classifiers With and Without Preprocessing
+  Dataset : car_prediction_data.csv (301 rows × 9 columns)
+  Tools   : pandas, scikit-learn (KNeighborsClassifier, GaussianNB)
+  Models  : K-Nearest Neighbors (KNN), Gaussian Naïve Bayes
+================================================================================
+
+
+[ BLOCK 1 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import all required libraries for classification:
+#   - pandas              : data loading and manipulation
+#   - train_test_split    : split data into training/testing sets
+#   - KNeighborsClassifier: KNN classification algorithm
+#   - GaussianNB          : Naive Bayes classifier (assumes
+#                           Gaussian/normal feature distributions)
+#   - accuracy_score      : metric to evaluate predictions
+#   - StandardScaler      : standardize features for preprocessing
+# ---------------------------------------------------------
+
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+
+
+[ BLOCK 2 — FILE UPLOAD (Google Colab) ]
+# ---------------------------------------------------------
+# Upload the dataset from local storage into the Colab
+# runtime. Required only when running in Google Colab.
+# ---------------------------------------------------------
+
+from google.colab import files
+files.upload()
+
+
+[ BLOCK 3 — LOAD DATASET ]
+# ---------------------------------------------------------
+# Read the car prediction CSV into a DataFrame.
+# Preview the first 5 rows to confirm it loaded correctly.
+# Columns include: Car_Name, Year, Selling_Price,
+# Present_Price, Kms_Driven, Fuel_Type, Seller_Type,
+# Transmission, Owner.
+# ---------------------------------------------------------
+
+df = pd.read_csv("car_prediction_data.csv")
+df.head()
+
+
+[ BLOCK 4 — FEATURE AND TARGET SEPARATION ]
+# ---------------------------------------------------------
+# Split the DataFrame into:
+#   X : all columns except the last one (features/predictors)
+#   y : the last column only (target/label to predict)
+# iloc uses integer-based indexing:
+#   [:,:-1] means "all rows, all columns except the last"
+#   [:, -1] means "all rows, last column only"
+# ---------------------------------------------------------
+
+X = df.iloc[:, :-1]
+y = df.iloc[:, -1]
+
+
+[ BLOCK 5 — ENCODE CATEGORICAL FEATURES ]
+# ---------------------------------------------------------
+# ML models need numeric input; text columns must be encoded.
+# pd.get_dummies() converts categorical columns into binary
+# (0/1) indicator columns — one per unique category value.
+# Applied to X only (features), not to the target y.
+# ---------------------------------------------------------
+
+X = pd.get_dummies(X)
+
+
+[ BLOCK 6 — TRAIN/TEST SPLIT (WITHOUT PREPROCESSING) ]
+# ---------------------------------------------------------
+# Split the encoded data into training and testing sets:
+#   test_size=0.2   → 20% of data held out for testing
+#   random_state=1  → ensures reproducible random split
+# At this point NO scaling has been applied yet,
+# so this section evaluates raw (unscaled) performance.
+# ---------------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=1
+)
+
+
+[ BLOCK 7 — KNN CLASSIFIER (WITHOUT PREPROCESSING) ]
+# ---------------------------------------------------------
+# K-Nearest Neighbors classifies a sample by looking at its
+# K closest neighbours and taking a majority vote.
+# Default K=5. Without scaling, features with large ranges
+# (e.g., Kms_Driven) will dominate the distance metric,
+# potentially biasing the classification.
+#
+# Result: KNN Accuracy (no preprocessing) ≈ 91.8%
+# ---------------------------------------------------------
+
+knn = KNeighborsClassifier()
+knn.fit(X_train, y_train)
+
+pred1 = knn.predict(X_test)
+print("KNN Accuracy (no preprocessing):", accuracy_score(y_test, pred1))
+# Output: 0.9180327868852459
+
+
+[ BLOCK 8 — NAIVE BAYES CLASSIFIER (WITHOUT PREPROCESSING) ]
+# ---------------------------------------------------------
+# Gaussian Naive Bayes assumes each feature follows a
+# Gaussian (normal) distribution. It calculates the probability
+# of a class given a feature vector using Bayes' theorem.
+# It is computationally fast and works well for small datasets.
+#
+# Result: GaussianNB Accuracy (no preprocessing) ≈ 91.8%
+# ---------------------------------------------------------
+
+nb = GaussianNB()
+nb.fit(X_train, y_train)
+
+pred2 = nb.predict(X_test)
+print("Naive Bayes Accuracy (no preprocessing):", accuracy_score(y_test, pred2))
+# Output: 0.9180327868852459
+
+
+[ BLOCK 9 — APPLY PREPROCESSING (Imputation + Scaling) ]
+# ---------------------------------------------------------
+# Step 1 — Handle any remaining missing values by replacing
+#           them with column means (mean imputation).
+# Step 2 — Apply StandardScaler to normalize all features
+#           to zero mean and unit variance. This is especially
+#           important for KNN which is distance-based.
+# NOTE: fit_transform() is called on the full X here
+#       (before re-splitting), which is a data leakage scenario
+#       common in introductory notebooks.
+# ---------------------------------------------------------
+
+# Fill NaN values with the column mean before scaling
+X = X.fillna(X.mean())
+
+# Fit and transform the entire feature set
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+
+[ BLOCK 10 — TRAIN/TEST SPLIT (WITH PREPROCESSING) ]
+# ---------------------------------------------------------
+# Re-split the now-scaled data using the same proportions
+# and random state to ensure a fair comparison with the
+# unscaled results from Block 6.
+# ---------------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=1
+)
+
+
+[ BLOCK 11 — KNN CLASSIFIER (WITH PREPROCESSING) ]
+# ---------------------------------------------------------
+# Re-train KNN on the scaled data. After scaling, all features
+# contribute equally to distance calculations.
+#
+# Result: KNN Accuracy (with preprocessing) ≈ 91.8%
+# (Same as before — KNN is not significantly improved here,
+# possibly because the dataset is small or already separable.)
+# ---------------------------------------------------------
+
+knn2 = KNeighborsClassifier()
+knn2.fit(X_train, y_train)
+
+pred3 = knn2.predict(X_test)
+print("KNN Accuracy (with preprocessing):", accuracy_score(y_test, pred3))
+# Output: 0.9180327868852459
+
+
+[ BLOCK 12 — NAIVE BAYES CLASSIFIER (WITH PREPROCESSING) ]
+# ---------------------------------------------------------
+# Re-train Gaussian Naive Bayes on the scaled features.
+# Scaling can affect GaussianNB since it changes the
+# estimated Gaussian parameters (mean, variance) per feature.
+#
+# Result: GaussianNB Accuracy (with preprocessing) ≈ 81.9%
+# Scaling actually hurt GaussianNB here — this is expected
+# because GaussianNB models the raw feature distributions,
+# and standardizing can change those distribution shapes.
+# ---------------------------------------------------------
+
+nb2 = GaussianNB()
+nb2.fit(X_train, y_train)
+
+pred4 = nb2.predict(X_test)
+print("Naive Bayes Accuracy (with preprocessing):", accuracy_score(y_test, pred4))
+# Output: 0.819672131147541
+
+
+[ BLOCK 13 — FINAL DATASET REVIEW ]
+# ---------------------------------------------------------
+# Quick review of the first 10 rows of the original DataFrame
+# to confirm data integrity before wrapping up.
+# ---------------------------------------------------------
+
+df.head(10)
+
+
+# ================================================================================
+# SUMMARY OF RESULTS:
+#
+#   Model               | Without Preprocessing | With Preprocessing
+#   ------------------- | --------------------- | ------------------
+#   KNN                 |       91.80%          |       91.80%
+#   Gaussian Naive Bayes|       91.80%          |       81.97%
+#
+# KEY INSIGHT:
+#   - KNN performance is unchanged here; the dataset may already be well-separated.
+#   - GaussianNB performance DROPPED after scaling — scaling changes the assumed
+#     feature distributions that GaussianNB relies on, which can reduce accuracy.
+# ================================================================================

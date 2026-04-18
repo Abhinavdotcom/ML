@@ -1,0 +1,246 @@
+================================================================================
+  SVM vs DECISION TREE CLASSIFICATION — ADULT INCOME DATASET
+  Topic   : Comparing Support Vector Machine and Decision Tree
+  Dataset : adult.csv (32,561 rows × 15 columns)
+  Tools   : pandas, numpy, scikit-learn
+  Models  : SVC (RBF kernel), DecisionTreeClassifier
+================================================================================
+
+
+[ BLOCK 1 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import core libraries for data handling and ML:
+#   - pandas : DataFrame operations
+#   - numpy  : numerical utilities (NaN handling)
+# Additional sklearn imports are done inline within
+# each block as needed for clarity.
+# ---------------------------------------------------------
+
+import pandas as pd
+import numpy as np
+
+
+[ BLOCK 2 — FILE UPLOAD (Google Colab) ]
+# ---------------------------------------------------------
+# Upload adult.csv from the local machine into the Colab
+# runtime filesystem. Applicable only on Google Colab.
+# ---------------------------------------------------------
+
+from google.colab import files
+uploaded = files.upload()
+
+
+[ BLOCK 3 — LOAD DATASET ]
+# ---------------------------------------------------------
+# Load the UCI Adult Income dataset into a DataFrame.
+# Dataset contains 32,561 records with demographic attributes
+# and an income label (<=50K or >50K annual income).
+# ---------------------------------------------------------
+
+df = pd.read_csv('adult.csv')
+df.head()
+
+
+[ BLOCK 4 — HANDLE MISSING VALUES ]
+# ---------------------------------------------------------
+# The Adult dataset uses '?' as a placeholder for missing data.
+# Replace '?' with proper NaN so pandas can detect them,
+# then drop all rows containing any NaN values.
+#
+# dropna() is used here (rather than imputation) for simplicity.
+# This removes ~2000 rows but ensures no noisy placeholders
+# remain in the data for model training.
+# ---------------------------------------------------------
+
+df.replace('?', np.nan, inplace=True)
+df.dropna(inplace=True)
+
+
+[ BLOCK 5 — LABEL ENCODING OF CATEGORICAL COLUMNS ]
+# ---------------------------------------------------------
+# Convert all categorical (text) columns to numeric codes
+# using LabelEncoder. Unlike One-Hot Encoding, Label Encoding
+# assigns each unique category an integer (e.g., Male=1, Female=0).
+#
+# This is sufficient for tree-based models (Decision Trees)
+# but can impose an unintended ordinal relationship for models
+# like SVM — noted as a limitation of this approach.
+# All object-type columns are encoded in a single loop.
+# ---------------------------------------------------------
+
+from sklearn.preprocessing import LabelEncoder
+
+le = LabelEncoder()
+
+for col in df.columns:
+    if df[col].dtype == 'object':
+        df[col] = le.fit_transform(df[col])
+
+
+[ BLOCK 6 — FEATURE / TARGET SPLIT ]
+# ---------------------------------------------------------
+# Separate the dataset into:
+#   X : all columns except 'income' (14 demographic features)
+#   y : the 'income' column (binary target: 0 = <=50K, 1 = >50K)
+# Using named column access for clarity over iloc indexing.
+# ---------------------------------------------------------
+
+X = df.drop('income', axis=1)
+y = df['income']
+
+
+[ BLOCK 7 — TRAIN / TEST SPLIT ]
+# ---------------------------------------------------------
+# Divide data into training (80%) and testing (20%) sets.
+# test_size=0.2  → 20% withheld for final evaluation
+# random_state=42 → reproducible split across runs
+# ---------------------------------------------------------
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+
+[ BLOCK 8 — FEATURE SCALING ]
+# ---------------------------------------------------------
+# Standardize training and test features:
+#   fit_transform(X_train) → computes mean/std FROM training data
+#                            and applies transformation
+#   transform(X_test)      → applies the SAME mean/std from training
+#                            to test data (no data leakage)
+#
+# CRITICAL: Always fit the scaler on training data only.
+# Fitting on test data would leak test information into the model.
+#
+# Scaling is essential for SVM — SVMs maximize a geometric margin
+# that is sensitive to the magnitude of feature values.
+# ---------------------------------------------------------
+
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+[ BLOCK 9 — SVM CLASSIFIER (RBF Kernel) ]
+# ---------------------------------------------------------
+# Support Vector Machine with Radial Basis Function (RBF) kernel.
+# The RBF kernel maps data into infinite-dimensional space,
+# enabling SVM to find non-linear decision boundaries.
+#
+# How it works:
+#   - SVM finds the hyperplane that maximizes the margin between
+#     the two classes (income <=50K vs >50K).
+#   - The RBF kernel handles non-linearly separable data by
+#     implicitly computing dot products in a higher-dimensional space.
+#
+# Training is done on SCALED data (required for SVM).
+# ---------------------------------------------------------
+
+from sklearn.svm import SVC
+
+svm_model = SVC(kernel='rbf')
+svm_model.fit(X_train_scaled, y_train)
+
+
+[ BLOCK 10 — SVM PREDICTIONS ]
+# ---------------------------------------------------------
+# Generate class predictions on the scaled test set.
+# The model assigns each test sample to class 0 (<=50K)
+# or class 1 (>50K) based on which side of the hyperplane it falls.
+# ---------------------------------------------------------
+
+svm_pred = svm_model.predict(X_test_scaled)
+
+
+[ BLOCK 11 — SVM EVALUATION ]
+# ---------------------------------------------------------
+# Evaluate the SVM model using:
+#   accuracy_score      : fraction of correct predictions
+#   classification_report : per-class precision, recall, F1-score
+#
+# Results:
+#   SVM Accuracy ≈ 83.6%
+#   Class 0 (<=50K): F1 ≈ 0.90  — well predicted (majority class)
+#   Class 1 (>50K) : F1 ≈ 0.62  — harder to predict (minority class)
+# ---------------------------------------------------------
+
+from sklearn.metrics import accuracy_score, classification_report
+
+print("SVM Accuracy:", accuracy_score(y_test, svm_pred))
+print(classification_report(y_test, svm_pred))
+# SVM Accuracy: 0.8362340460798939
+
+
+[ BLOCK 12 — DECISION TREE CLASSIFIER ]
+# ---------------------------------------------------------
+# Train a standard Decision Tree with no depth restriction.
+# Unlike SVM, Decision Trees do NOT require scaled input —
+# they split based on feature thresholds, not distances.
+# An unrestricted tree will typically overfit on training data
+# but provides a useful baseline to compare against SVM.
+#
+# Note: training is done on UNSCALED X_train here.
+# ---------------------------------------------------------
+
+from sklearn.tree import DecisionTreeClassifier
+
+dt_model = DecisionTreeClassifier()
+dt_model.fit(X_train, y_train)
+
+
+[ BLOCK 13 — DECISION TREE PREDICTIONS ]
+# ---------------------------------------------------------
+# Generate predictions using the decision tree on the
+# unscaled test set (consistent with how it was trained).
+# ---------------------------------------------------------
+
+dt_pred = dt_model.predict(X_test)
+
+
+[ BLOCK 14 — DECISION TREE EVALUATION ]
+# ---------------------------------------------------------
+# Evaluate the Decision Tree model on the test set.
+#
+# Results:
+#   Decision Tree Accuracy ≈ 80.0%
+#   Class 0 (<=50K): F1 ≈ 0.87
+#   Class 1 (>50K) : F1 ≈ 0.60
+# The unrestricted tree underperforms SVM — this is likely
+# due to overfitting on the training data.
+# ---------------------------------------------------------
+
+print("Decision Tree Accuracy:", accuracy_score(y_test, dt_pred))
+print(classification_report(y_test, dt_pred))
+# Decision Tree Accuracy: 0.7997679429802752
+
+
+[ BLOCK 15 — MODEL COMPARISON ]
+# ---------------------------------------------------------
+# Side-by-side accuracy comparison of both models.
+# This makes it easy to identify which model performs better
+# on this dataset without sorting through verbose output.
+# ---------------------------------------------------------
+
+print("SVM Accuracy:", accuracy_score(y_test, svm_pred))
+print("Decision Tree Accuracy:", accuracy_score(y_test, dt_pred))
+
+
+# ================================================================================
+# FINAL COMPARISON SUMMARY:
+#
+#   Model             | Accuracy
+#   ----------------- | --------
+#   SVM (RBF Kernel)  |  83.62%
+#   Decision Tree     |  79.98%
+#
+# KEY TAKEAWAYS:
+#   - SVM outperforms Decision Tree by ~3.6% on this dataset.
+#   - SVM is better at handling complex, non-linear boundaries with scaling.
+#   - Decision Tree (no depth limit) likely overfits the training data.
+#   - Limiting tree depth (as in Assignment 3) or using an ensemble
+#     (Random Forest) would close this performance gap.
+# ================================================================================

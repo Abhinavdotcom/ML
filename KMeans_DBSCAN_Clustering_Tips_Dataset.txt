@@ -1,0 +1,191 @@
+================================================================================
+  CLUSTERING ANALYSIS — KMEANS vs DBSCAN
+  Topic   : Unsupervised Learning with KMeans and DBSCAN Clustering
+  Dataset : Tips dataset (244 rows × 7 columns, via seaborn)
+  Tools   : pandas, numpy, matplotlib, scikit-learn
+  Models  : KMeans (k=3), DBSCAN (eps=0.5, min_samples=5)
+================================================================================
+
+
+[ BLOCK 1 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import all required libraries for clustering:
+#   - numpy / pandas         : data handling and array operations
+#   - matplotlib             : scatter plot visualizations
+#   - StandardScaler         : normalize features before clustering
+#   - KMeans                 : centroid-based partitional clustering
+#   - DBSCAN                 : density-based spatial clustering
+#   - silhouette_score       : metric to evaluate cluster quality
+#                              (ranges from -1 to +1; higher = better)
+# ---------------------------------------------------------
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.metrics import silhouette_score
+
+
+[ BLOCK 2 — LOAD TIPS DATASET ]
+# ---------------------------------------------------------
+# Load the 'Tips' dataset from a public seaborn GitHub URL.
+# This dataset contains 244 restaurant bill records with:
+#   total_bill : total bill amount (float)
+#   tip        : tip amount (float)
+#   sex        : gender of the bill payer (Male/Female)
+#   smoker     : smoking section? (Yes/No)
+#   day        : day of the week (Thu/Fri/Sat/Sun)
+#   time       : meal time (Lunch/Dinner)
+#   size       : number of people in the party (int)
+#
+# No labeled target — this is an UNSUPERVISED learning task.
+# The goal is to discover natural groupings in the data.
+# ---------------------------------------------------------
+
+url = "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/tips.csv"
+df = pd.read_csv(url)
+df.head()
+
+
+[ BLOCK 3 — CATEGORICAL ENCODING ]
+# ---------------------------------------------------------
+# Convert all categorical (text) columns to binary numeric
+# columns using One-Hot Encoding (get_dummies).
+# drop_first=True removes one dummy per feature group to
+# avoid perfect multicollinearity between encoded columns.
+#
+# After encoding, extract the raw numpy array with .values —
+# scikit-learn clustering algorithms expect arrays, not DataFrames.
+# ---------------------------------------------------------
+
+df = pd.get_dummies(df, drop_first=True)
+
+X = df.values   # Convert DataFrame to a numpy array for sklearn
+
+
+[ BLOCK 4 — FEATURE SCALING ]
+# ---------------------------------------------------------
+# Standardize all features to zero mean and unit variance.
+# Clustering algorithms (especially KMeans and DBSCAN) use
+# distance metrics that are highly sensitive to feature scale.
+# Without scaling, features with large ranges (e.g., total_bill
+# in dollars) would dominate over small-range features (e.g., size).
+# ---------------------------------------------------------
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+
+[ BLOCK 5 — KMEANS CLUSTERING ]
+# ---------------------------------------------------------
+# Apply KMeans with k=3 clusters.
+#
+# How KMeans works:
+#   1. Randomly initialize 3 cluster centroids
+#   2. Assign each point to its nearest centroid (Euclidean distance)
+#   3. Recalculate centroids as the mean of all assigned points
+#   4. Repeat steps 2-3 until centroids stop moving (convergence)
+#
+# n_clusters=3  → number of clusters to find
+# random_state=42 → reproducible centroid initialization
+#
+# kmeans.labels_ → array of cluster IDs (0, 1, or 2) for each row.
+#
+# Silhouette Score ≈ 0.315
+#   A score near 0 means clusters overlap; near 1 means well-separated.
+#   0.315 indicates moderate, overlapping cluster structure in this data.
+# ---------------------------------------------------------
+
+kmeans = KMeans(n_clusters=3, random_state=42)
+kmeans.fit(X_scaled)
+
+labels_k = kmeans.labels_
+
+print(silhouette_score(X_scaled, labels_k))
+# Output: 0.3148229821867693
+
+
+[ BLOCK 6 — DBSCAN CLUSTERING ]
+# ---------------------------------------------------------
+# Apply DBSCAN (Density-Based Spatial Clustering of Applications
+# with Noise) — a fundamentally different clustering approach.
+#
+# How DBSCAN works:
+#   1. For each point, count how many other points are within
+#      a radius of `eps` (epsilon neighborhood).
+#   2. A "core point" has at least `min_samples` neighbors in its eps-ball.
+#   3. Points reachable from core points form a cluster.
+#   4. Points unreachable from any cluster are labeled -1 (noise/outliers).
+#
+# Parameters:
+#   eps=0.5         → radius of the neighborhood for each point
+#   min_samples=5   → minimum neighbors to be considered a core point
+#
+# DBSCAN automatically determines the number of clusters — no k needed.
+# Cluster label -1 means "noise" (outlier not belonging to any cluster).
+#
+# Silhouette Score ≈ -0.066
+#   Negative score means clusters are poorly defined or many points
+#   are classified as noise (-1). DBSCAN struggles with this dataset
+#   because tips data has relatively uniform density without clear
+#   spatial clusters.
+# ---------------------------------------------------------
+
+db = DBSCAN(eps=0.5, min_samples=5)
+db.fit(X_scaled)
+
+labels_d = db.labels_
+
+print(silhouette_score(X_scaled, labels_d))
+# Output: -0.06622712942082755
+
+
+[ BLOCK 7 — VISUALIZE KMEANS CLUSTERS ]
+# ---------------------------------------------------------
+# Create a 2D scatter plot using the first two scaled features
+# (total_bill and tip, approximately) on x and y axes.
+# Each point is colored according to its KMeans cluster label.
+# This gives an intuitive visual of how the data was partitioned.
+#
+# Note: This is a 2D projection of a higher-dimensional space,
+# so cluster separation may not appear perfect visually.
+# ---------------------------------------------------------
+
+plt.scatter(X_scaled[:, 0], X_scaled[:, 1], c=labels_k)
+plt.title("K-Means Clustering")
+plt.show()
+
+
+[ BLOCK 8 — VISUALIZE DBSCAN CLUSTERS ]
+# ---------------------------------------------------------
+# Plot the same 2D scatter using DBSCAN cluster labels.
+# Points labeled -1 (noise) appear as a distinct color.
+# The irregular, non-spherical cluster shapes visible in the
+# plot demonstrate DBSCAN's ability (or limitation) to discover
+# arbitrary-shaped clusters and identify outliers.
+# ---------------------------------------------------------
+
+plt.scatter(X_scaled[:, 0], X_scaled[:, 1], c=labels_d)
+plt.title("DBSCAN Clustering")
+plt.show()
+
+
+# ================================================================================
+# COMPARISON SUMMARY:
+#
+#   Algorithm  | Clusters Found | Silhouette Score | Handles Noise?
+#   ---------- | -------------- | ---------------- | --------------
+#   KMeans     |       3        |      0.315       |      No
+#   DBSCAN     |  Auto-detect   |     -0.066       |      Yes
+#
+# KEY INSIGHTS:
+#   - KMeans performs better on this dataset (higher silhouette score).
+#     The tips data has roughly spherical, similar-density clusters that
+#     suit KMeans' centroid-based approach.
+#   - DBSCAN's negative score suggests poor cluster separation when using
+#     eps=0.5 — tuning eps and min_samples could improve performance.
+#   - DBSCAN is more powerful for irregular shapes and noisy real-world data;
+#     KMeans works best when clusters are roughly convex and similarly sized.
+# ================================================================================

@@ -1,0 +1,236 @@
+================================================================================
+  REGRESSION ANALYSIS — LINEAR, POLYNOMIAL & LOGISTIC REGRESSION
+  Topic   : Fare Prediction (Regression) + Survival Classification (Logistic)
+  Dataset : Titanic (891 passengers × 12 columns, via GitHub)
+  Tools   : pandas, numpy, scikit-learn
+  Models  : LinearRegression, PolynomialFeatures + LinearRegression,
+            Ridge, Lasso, LogisticRegression
+================================================================================
+
+
+[ BLOCK 1 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import all required libraries:
+#   - numpy / pandas             : data handling
+#   - train_test_split           : hold-out evaluation split
+#   - StandardScaler             : normalize features to mean=0, std=1
+#   - LinearRegression           : ordinary least squares regression
+#   - LogisticRegression         : binary classification via sigmoid
+#   - Ridge                      : L2-regularized linear regression
+#   - Lasso                      : L1-regularized linear regression (sparse)
+#   - PolynomialFeatures         : generate polynomial interaction terms
+#   - mean_absolute_error (MAE)  : avg absolute prediction error
+#   - mean_squared_error (MSE)   : avg squared prediction error
+#   - r2_score                   : variance explained by the model (0–1)
+#   - accuracy_score             : classification correct rate
+#   - classification_report      : precision, recall, F1 per class
+# ---------------------------------------------------------
+
+import numpy as np
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
+from sklearn.preprocessing import PolynomialFeatures
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, classification_report
+
+
+[ BLOCK 2 — LOAD TITANIC DATASET ]
+# ---------------------------------------------------------
+# Load the Titanic dataset directly from a public URL.
+# 891 passenger records, 12 features including:
+#   Survived, Pclass, Name, Sex, Age, SibSp,
+#   Parch, Ticket, Fare, Cabin, Embarked
+# This notebook uses the dataset for BOTH:
+#   (a) Regression task    → predict Fare amount
+#   (b) Classification task → predict Survived (0/1)
+# ---------------------------------------------------------
+
+url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+df = pd.read_csv(url)
+df.head()
+
+
+[ BLOCK 3 — DATA CLEANING & PREPROCESSING ]
+# ---------------------------------------------------------
+# Step 1: Drop uninformative or mostly-null columns:
+#   'Name'   → unique text ID, no predictive value
+#   'Ticket' → arbitrary alphanumeric code
+#   'Cabin'  → ~77% missing, too sparse to use
+#
+# Step 2: Impute remaining missing values:
+#   'Age'      → fill with median (skew-resistant)
+#   'Embarked' → fill with mode (most frequent port)
+#
+# Step 3: One-Hot Encode categorical columns:
+#   'Sex'      → binary: male=1, female=0 (or vice versa)
+#   'Embarked' → 3 possible values → 2 dummy columns
+#   drop_first=True removes one dummy to avoid multicollinearity.
+# ---------------------------------------------------------
+
+df.drop(['Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
+
+df['Age'].fillna(df['Age'].median(), inplace=True)
+df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
+
+df = pd.get_dummies(df, columns=['Sex', 'Embarked'], drop_first=True)
+
+
+[ BLOCK 4 — REGRESSION SETUP: PREDICT FARE ]
+# ---------------------------------------------------------
+# Task (a): Treat 'Fare' as the REGRESSION TARGET.
+# All other columns become the feature matrix X_reg.
+#
+# Then split into training (80%) and test (20%) sets.
+# Fit the scaler on training data only — applying to test
+# data using the same parameters to prevent data leakage.
+# ---------------------------------------------------------
+
+X_reg = df.drop('Fare', axis=1)
+y_reg = df['Fare']
+
+Xr_train, Xr_test, yr_train, yr_test = train_test_split(
+    X_reg, y_reg, test_size=0.2, random_state=42
+)
+
+# Fit scaler on training data; transform both train and test
+scaler = StandardScaler()
+Xr_train = scaler.fit_transform(Xr_train)
+Xr_test = scaler.transform(Xr_test)
+
+
+[ BLOCK 5 — LINEAR REGRESSION ]
+# ---------------------------------------------------------
+# Ordinary Least Squares (OLS) Linear Regression.
+# Finds the hyperplane that minimizes the sum of squared
+# residuals (differences between predicted and actual values).
+# Assumes a LINEAR relationship between features and target.
+#
+# Evaluation metrics:
+#   MAE  (Mean Absolute Error)  = 20.87 — avg error in fare units
+#   MSE  (Mean Squared Error)   = 933.3 — penalizes large errors more
+#   R²   (Coefficient of Det.)  = 0.397 — model explains ~39.7% of
+#                                          variance in Fare
+#
+# An R² of ~0.4 is modest — the fare is only partially
+# explained by the available features.
+# ---------------------------------------------------------
+
+lr = LinearRegression()
+lr.fit(Xr_train, yr_train)
+
+yr_pred = lr.predict(Xr_test)
+
+print(mean_absolute_error(yr_test, yr_pred))   # 20.87
+print(mean_squared_error(yr_test, yr_pred))    # 933.33
+print(r2_score(yr_test, yr_pred))              # 0.3969
+
+
+[ BLOCK 6 — POLYNOMIAL REGRESSION (Degree 2) ]
+# ---------------------------------------------------------
+# Polynomial Regression adds non-linear terms to the feature set.
+# PolynomialFeatures(degree=2) creates new columns for:
+#   - All original features (degree 1)
+#   - All squared features  (feature²)
+#   - All interaction terms (feature_i × feature_j)
+# These expanded features are then fit with a standard
+# LinearRegression model — it's still "linear" in parameters.
+#
+# fit_transform on training, transform only on test (no leakage).
+#
+# Results:
+#   MAE = 18.37  (improved from 20.87 with linear)
+#   R²  = 0.328  (DECREASED — polynomial may be overfitting here)
+# ---------------------------------------------------------
+
+poly = PolynomialFeatures(degree=2)
+Xr_train_poly = poly.fit_transform(Xr_train)
+Xr_test_poly = poly.transform(Xr_test)
+
+lr_poly = LinearRegression()
+lr_poly.fit(Xr_train_poly, yr_train)
+
+yr_pred_poly = lr_poly.predict(Xr_test_poly)
+
+print(mean_absolute_error(yr_test, yr_pred_poly))   # 18.37
+print(r2_score(yr_test, yr_pred_poly))              # 0.328
+
+
+[ BLOCK 7 — CLASSIFICATION SETUP: PREDICT SURVIVAL ]
+# ---------------------------------------------------------
+# Task (b): Switch to CLASSIFICATION — predict 'Survived' (0 or 1).
+# All other columns become the feature matrix X_cls.
+#
+# Split into 80% training and 20% testing sets.
+# Standardize features for Logistic Regression, which is
+# sensitive to feature scale (uses gradient-based optimization).
+# ---------------------------------------------------------
+
+X_cls = df.drop('Survived', axis=1)
+y_cls = df['Survived']
+
+Xc_train, Xc_test, yc_train, yc_test = train_test_split(
+    X_cls, y_cls, test_size=0.2, random_state=42
+)
+
+# Scale classification features separately from regression scaling
+scaler = StandardScaler()
+Xc_train = scaler.fit_transform(Xc_train)
+Xc_test = scaler.transform(Xc_test)
+
+
+[ BLOCK 8 — LOGISTIC REGRESSION CLASSIFIER ]
+# ---------------------------------------------------------
+# Logistic Regression estimates the probability of class 1
+# (survived) using the sigmoid function:
+#   P(y=1) = 1 / (1 + e^(-z))  where z = w·X + b
+#
+# If P(y=1) > 0.5 → predict Survived=1, else Survived=0.
+#
+# max_iter=1000 → allows more iterations for the solver to
+# converge on this dataset (default 100 may not be enough).
+#
+# Results:
+#   Accuracy ≈ 80.4%
+#   Class 0 (not survived): F1 = 0.84
+#   Class 1 (survived)    : F1 = 0.76
+#
+# Logistic Regression is a solid, interpretable baseline
+# for binary classification tasks.
+# ---------------------------------------------------------
+
+log = LogisticRegression(max_iter=1000)
+log.fit(Xc_train, yc_train)
+
+yc_pred = log.predict(Xc_test)
+
+print(accuracy_score(yc_test, yc_pred))            # 0.8045
+print(classification_report(yc_test, yc_pred))
+
+
+# ================================================================================
+# FINAL RESULTS SUMMARY:
+#
+# ── REGRESSION (Target: Fare) ──────────────────────────────────────────────────
+#   Model                | MAE   | MSE    | R²
+#   -------------------- | ----- | ------ | -----
+#   Linear Regression    | 20.87 | 933.33 | 0.397
+#   Polynomial (deg=2)   | 18.37 |  N/A   | 0.328
+#
+#   Linear regression has a better R² here; polynomial may be overfitting
+#   on the expanded feature space given the relatively small dataset.
+#   Ridge/Lasso regularization would help control polynomial overfitting.
+#
+# ── CLASSIFICATION (Target: Survived) ─────────────────────────────────────────
+#   Model                | Accuracy
+#   -------------------- | --------
+#   Logistic Regression  |  80.45%
+#
+# KEY INSIGHT:
+#   Logistic Regression is highly interpretable — the model coefficients
+#   indicate the direction and magnitude of each feature's effect on survival.
+# ================================================================================

@@ -1,0 +1,200 @@
+================================================================================
+  DATA PREPROCESSING — CAR PRICE DATASET
+  Topic   : Exploratory Data Analysis & Preprocessing Pipeline
+  Dataset : car_prediction_data.csv (301 rows × 9 columns)
+  Tools   : pandas, numpy, matplotlib, seaborn, scikit-learn
+================================================================================
+
+
+[ BLOCK 1 — FILE UPLOAD (Google Colab) ]
+# ---------------------------------------------------------
+# Upload the dataset CSV file from local machine into the
+# Google Colab runtime environment using the files API.
+# This is specific to Colab; in a local environment, you
+# would just provide the file path directly to pd.read_csv().
+# ---------------------------------------------------------
+
+from google.colab import files
+uploaded = files.upload()
+
+
+[ BLOCK 2 — LIBRARY IMPORTS ]
+# ---------------------------------------------------------
+# Import all required libraries for data manipulation,
+# visualization, and preprocessing:
+#   - pandas   : tabular data handling (DataFrame)
+#   - numpy    : numerical operations and array support
+#   - matplotlib / seaborn : plotting and visualization
+#   - StandardScaler : standardizes features to mean=0, std=1
+#   - MinMaxScaler   : scales features to a [0,1] range
+# ---------------------------------------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+
+[ BLOCK 3 — LOAD DATASET & INITIAL INSPECTION ]
+# ---------------------------------------------------------
+# Read the CSV file into a pandas DataFrame and preview
+# the first 5 rows to understand the structure and column
+# names. The dataset contains information about used cars
+# including selling price, fuel type, transmission, etc.
+# ---------------------------------------------------------
+
+df = pd.read_csv("car_prediction_data.csv")
+df.head()
+
+# Check the dimensions of the DataFrame (rows × columns).
+# Output: (301, 9) — 301 car records, 9 features each.
+df.shape
+
+# Print detailed column metadata: dtype, non-null count.
+# This helps identify which columns have missing values
+# and which need type conversion.
+df.info()
+
+# Generate descriptive statistics (mean, std, min, max, quartiles)
+# for all numerical columns to understand data distribution.
+df.describe()
+
+
+[ BLOCK 4 — MISSING VALUE HANDLING ]
+# ---------------------------------------------------------
+# Check for missing (null) values in every column.
+# The sum() aggregation tells us how many nulls exist.
+# Result here shows 0 nulls — the dataset is clean.
+# ---------------------------------------------------------
+
+df.isnull().sum()
+
+# For numerical columns: fill any missing values with the
+# column mean. This is mean imputation — a common strategy
+# that preserves the overall distribution without dropping rows.
+df.fillna(df.mean(numeric_only=True), inplace=True)
+
+# For categorical (object-type) columns: fill missing values
+# with the most frequent value (mode). This is mode imputation,
+# appropriate for non-numeric data where mean is undefined.
+for col in df.select_dtypes(include='object'):
+    df[col].fillna(df[col].mode()[0], inplace=True)
+
+
+[ BLOCK 5 — DUPLICATE DETECTION & REMOVAL ]
+# ---------------------------------------------------------
+# Identify duplicate rows in the dataset.
+# df.duplicated().sum() returns the count of exact duplicate rows.
+# Output: 2 — there are 2 duplicate records to remove.
+# ---------------------------------------------------------
+
+df.duplicated().sum()
+
+# Remove duplicate rows permanently.
+# inplace=True modifies the DataFrame directly without
+# creating a new copy, saving memory.
+df.drop_duplicates(inplace=True)
+
+
+[ BLOCK 6 — CATEGORICAL ENCODING (One-Hot Encoding) ]
+# ---------------------------------------------------------
+# Identify which columns are still stored as text (object dtype).
+# These cannot be used directly by ML algorithms, which need
+# numerical input. Columns: Car_Name, Fuel_Type,
+# Seller_Type, Transmission.
+# ---------------------------------------------------------
+
+df.select_dtypes(include='object').columns
+
+# Apply One-Hot Encoding (OHE) using pd.get_dummies().
+# Each unique category becomes a new binary (0/1) column.
+# drop_first=True removes one category per feature to avoid
+# the "dummy variable trap" (perfect multicollinearity).
+df = pd.get_dummies(df, drop_first=True)
+df.head()
+
+
+[ BLOCK 7 — FEATURE/TARGET SPLIT ]
+# ---------------------------------------------------------
+# Separate the DataFrame into:
+#   X : feature matrix (all columns except the last one)
+#   y : target vector  (last column — the prediction label)
+# Using iloc ensures this works regardless of column names.
+# ---------------------------------------------------------
+
+X = df.iloc[:, :-1]
+y = df.iloc[:, -1]
+
+
+[ BLOCK 8 — FEATURE SCALING (StandardScaler) ]
+# ---------------------------------------------------------
+# Standardize all feature columns to have mean=0 and std=1.
+# This is essential for distance-based or gradient-based
+# algorithms (KNN, SVM, Neural Networks, etc.) that are
+# sensitive to the scale of input values.
+#
+# fit_transform() learns the mean/std from X and applies it.
+# Result is converted back to a DataFrame for readability.
+# ---------------------------------------------------------
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
+X_scaled.head()
+
+
+[ BLOCK 9 — OUTLIER DETECTION (Boxplot) ]
+# ---------------------------------------------------------
+# Visualize the distribution of all scaled features using
+# boxplots. The "whiskers" extend to 1.5×IQR from the box;
+# points beyond this range are considered outliers and shown
+# as individual dots above/below the whiskers.
+# ---------------------------------------------------------
+
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=X_scaled)
+plt.xticks(rotation=90)
+plt.show()
+
+
+[ BLOCK 10 — OUTLIER REMOVAL (IQR Method) ]
+# ---------------------------------------------------------
+# Use the Interquartile Range (IQR) method to remove outliers:
+#   Q1 = 25th percentile, Q3 = 75th percentile
+#   IQR = Q3 - Q1
+#
+# Any data point below (Q1 - 1.5×IQR) or above (Q3 + 1.5×IQR)
+# on ANY column is flagged and removed.
+#
+# Note: With binary one-hot encoded columns, this method
+# tends to remove almost all rows (output shows 0 rows retained),
+# which is a known limitation of IQR on sparse binary data.
+# ---------------------------------------------------------
+
+Q1 = X_scaled.quantile(0.25)
+Q3 = X_scaled.quantile(0.75)
+IQR = Q3 - Q1
+
+# Filter: keep only rows where ALL feature values fall within
+# the acceptable range (no extreme values in any column).
+X_no_outliers = X_scaled[~((X_scaled < (Q1 - 1.5 * IQR)) |
+                            (X_scaled > (Q3 + 1.5 * IQR))).any(axis=1)]
+
+X_no_outliers.shape  # Output: (0, 105) — all rows removed due to binary columns
+
+
+[ BLOCK 11 — DTYPE CLEANUP (Boolean to Integer) ]
+# ---------------------------------------------------------
+# After get_dummies(), new columns may be stored as bool dtype.
+# Most sklearn estimators require numeric (int/float) inputs.
+# Convert all boolean columns to integer (0 or 1) explicitly.
+# ---------------------------------------------------------
+
+bool_cols = df.select_dtypes(include='bool').columns
+df[bool_cols] = df[bool_cols].astype(int)
+
+# Verify the final state of the DataFrame after all preprocessing.
+df.head()
